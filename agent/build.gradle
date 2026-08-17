@@ -1,0 +1,64 @@
+plugins {
+    id 'java'
+    id 'groovy'
+    id 'com.gradleup.shadow' version "9.0.0"
+}
+
+group = 'me.redot.grin'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+tasks.jar {
+    enabled = false
+}
+
+dependencies {
+    implementation 'org.apache.groovy:groovy:5.0.8'
+    implementation 'org.apache.groovy:groovy-groovysh:5.0.8'
+
+    implementation 'org.jline:jline:4.3.1'
+
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    implementation 'org.apache.sshd:sshd-core:2.19.0'
+//    implementation 'org.apache.sshd:sshd-common:2.19.0'
+    implementation 'org.slf4j:slf4j-simple:2.0.17'
+}
+
+java {
+    sourceCompatibility = '11'
+    targetCompatibility = '11'
+
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(11)
+    }
+}
+
+compileGroovy {
+    sourceCompatibility = '11'
+    targetCompatibility = '11'
+}
+
+shadowJar {
+    archiveClassifier = ''
+    mergeServiceFiles()
+
+    exclude 'groovy/console/**'
+    exclude 'groovy/ui/**'
+    exclude 'groovy/swing/**'
+    exclude 'org/abego/treelayout/**'
+    exclude 'com/github/javaparser/**'
+
+    manifest {
+        attributes(
+                'Agent-Class': 'me.redot.grin.agent.GrinAgent',
+                'Can-Redefine-Classes': 'true',
+                'Can-Retransform-Classes': 'true'
+        )
+    }
+}

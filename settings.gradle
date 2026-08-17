@@ -1,0 +1,3 @@
+rootProject.name = 'grin'
+include 'core'
+include 'agent'

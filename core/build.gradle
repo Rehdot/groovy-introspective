@@ -1,0 +1,35 @@
+plugins {
+    id 'java'
+}
+
+group = 'me.redot.grin'
+version = '1.0.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.apache.groovy:groovy:5.0.8'
+    testImplementation platform('org.junit:junit-bom:5.10.0')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    implementation 'org.slf4j:slf4j-simple:2.0.17'
+
+    implementation project(':agent')
+}
+
+tasks.named('processResources') {
+    from(project(':agent').tasks.named('jar')) { into '' }
+}
+
+jar {
+    manifest {
+        attributes('Main-Class': 'me.redot.grin.core.GrinCli')
+    }
+}
+
+test {
+    useJUnitPlatform()
+}
