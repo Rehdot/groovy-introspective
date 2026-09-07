@@ -19,3 +19,30 @@ dependencies {
 test {
     useJUnitPlatform()
 }
+
+def grinUserHome = System.getenv('USERPROFILE') ?: System.getProperty('user.home')
+def grinInstallDirectory = file("${grinUserHome}/.grin/bin")
+
+tasks.register('installGrin', Copy) {
+    group = 'grin'
+    description = 'Clean-builds agent and core, then installs the core JAR in ~/.grin/bin.'
+
+    dependsOn ':agent:clean', ':agent:shadowJar', ':core:clean', ':core:jar'
+    from { project(':core').tasks.named('jar').get().archiveFile.get().asFile }
+    into grinInstallDirectory
+
+    doLast {
+        logger.lifecycle("Installed grin in ${grinInstallDirectory}")
+    }
+}
+
+gradle.projectsEvaluated {
+    def agentClean = project(':agent').tasks.named('clean')
+    def agentJar = project(':agent').tasks.named('shadowJar')
+    def coreClean = project(':core').tasks.named('clean')
+    def coreJar = project(':core').tasks.named('jar')
+
+    agentJar.configure { mustRunAfter agentClean }
+    coreClean.configure { mustRunAfter agentJar }
+    coreJar.configure { mustRunAfter coreClean }
+}
