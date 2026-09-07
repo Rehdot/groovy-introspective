@@ -136,19 +136,11 @@ class GrinShell {
                 reader, systemRegistry.&commandDescription,
                 5, TailTipWidgets.TipType.COMPLETER
         )
-        new AutosuggestionWidgets(reader)
+        new AutosuggestionWidgets(reader).inspect()
 
         def writer = new PrintWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8), true)
 
-        new Thread({
-            GrinAgent.RUNTIME_JAR_PATHS.each { path ->
-                try {
-                    systemRegistry.invoke('/classloader', "--add=$path")
-                } catch (Exception ignored) {
-                    writer.println render("Failed to append $path to the classpath!")
-                }
-            }
-        }, "grin-classloader-worker").start()
+        appendRuntimeJarsToClasspath systemRegistry
 
         writer.println()
         writer.println render('Groovy Introspective', 'green')
@@ -178,6 +170,16 @@ class GrinShell {
         }
         systemRegistry.close()
         return 0
+    }
+
+    private static void appendRuntimeJarsToClasspath(GroovySystemRegistry systemRegistry) {
+        new Thread({
+            GrinAgent.RUNTIME_JAR_PATHS.each { path ->
+                try {
+                    systemRegistry.invoke('/classloader', "--add=$path")
+                } catch (Exception ignored) {}
+            }
+        }, "grin-classloader-worker").start()
     }
 
     private static Path resolveResourcePath(URL url) {
