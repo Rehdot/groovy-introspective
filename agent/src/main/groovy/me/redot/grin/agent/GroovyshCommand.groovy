@@ -51,7 +51,7 @@ class GroovyshCommand implements Command, Runnable {
 
         try {
             System.err.println("[grin] Starting Groovy shell...")
-            def shell = new GrinShell(input, output)
+            def shell = new GrinShell(input, output, [:], environment)
             exitCode = shell.start()
             System.err.println("[grin] Groovy shell returned: $exitCode")
         } catch (Throwable t) {

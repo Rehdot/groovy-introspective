@@ -25,9 +25,9 @@ def grinInstallDirectory = file("${grinUserHome}/.grin/bin")
 
 tasks.register('installGrin', Copy) {
     group = 'grin'
-    description = 'Clean-builds agent and core, then installs the core JAR in ~/.grin/bin.'
+    description = 'Rebuilds agent and core, then installs the core JAR in ~/.grin/bin.'
 
-    dependsOn ':agent:clean', ':agent:shadowJar', ':core:clean', ':core:jar'
+    dependsOn ':agent:shadowJar', ':core:jar'
     from { project(':core').tasks.named('jar').get().archiveFile.get().asFile }
     into grinInstallDirectory
 
@@ -37,12 +37,21 @@ tasks.register('installGrin', Copy) {
 }
 
 gradle.projectsEvaluated {
-    def agentClean = project(':agent').tasks.named('clean')
     def agentJar = project(':agent').tasks.named('shadowJar')
-    def coreClean = project(':core').tasks.named('clean')
+    def coreCompile = project(':core').tasks.named('compileJava')
     def coreJar = project(':core').tasks.named('jar')
 
-    agentJar.configure { mustRunAfter agentClean }
-    coreClean.configure { mustRunAfter agentJar }
-    coreJar.configure { mustRunAfter coreClean }
+    coreCompile.configure { mustRunAfter agentJar }
+    coreJar.configure { mustRunAfter agentJar }
+}
+
+gradle.taskGraph.whenReady { graph ->
+    if (graph.hasTask(tasks.named('installGrin').get())) {
+        graph.allTasks.findAll { task ->
+            task.project == project(':agent') || task.project == project(':core')
+        }.each { task ->
+            task.outputs.upToDateWhen { false }
+            task.outputs.doNotCacheIf('installGrin always builds current sources') { true }
+        }
+    }
 }

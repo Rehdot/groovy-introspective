@@ -112,8 +112,14 @@ class GrinCli {
     }
 
     private static void connectSsh(int port) throws IOException, InterruptedException {
+        String nullDevice = System.getProperty("os.name").startsWith("Windows") ? "NUL" : "/dev/null";
         ProcessBuilder pb = new ProcessBuilder(
-                "ssh", "-tt", "-p", port+"", "grin@localhost"
+                "ssh", "-tt",
+                "-o", "StrictHostKeyChecking=no",
+                "-o", "UserKnownHostsFile=" + nullDevice,
+                "-o", "LogLevel=ERROR",
+                "-p", Integer.toString(port),
+                "grin@localhost"
         );
         pb.inheritIO();
         Process sshProcess = pb.start();

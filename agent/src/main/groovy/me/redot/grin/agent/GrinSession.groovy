@@ -1,15 +1,14 @@
 package me.redot.grin.agent
 
 import groovy.transform.CompileStatic
-import org.apache.sshd.common.channel.Channel
-import org.apache.sshd.core.CoreModuleProperties;
+import org.apache.sshd.core.CoreModuleProperties
 import org.apache.sshd.server.SshServer
 import org.apache.sshd.server.auth.UserAuthFactory
-import org.apache.sshd.server.auth.UserAuthNoneFactory;
-import org.apache.sshd.server.keyprovider.SimpleGeneratorHostKeyProvider;
+import org.apache.sshd.server.auth.UserAuthNoneFactory
+import org.apache.sshd.server.keyprovider.SimpleGeneratorHostKeyProvider
 
 import java.nio.file.Path
-import java.time.Duration;
+import java.time.Duration
 
 @CompileStatic
 class GrinSession {

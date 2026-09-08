@@ -3,6 +3,9 @@ package me.redot.grin.agent
 import groovy.transform.Canonical
 import org.apache.groovy.groovysh.Main
 import org.apache.groovy.groovysh.jline.*
+import org.apache.sshd.server.Environment
+import org.apache.sshd.server.Signal
+import org.apache.sshd.server.SignalListener
 import org.jline.builtins.ClasspathResourceUtil
 import org.jline.builtins.ConfigurationPath
 import org.jline.builtins.SyntaxHighlighter
@@ -15,6 +18,7 @@ import org.jline.reader.UserInterruptException
 import org.jline.reader.impl.DefaultParser
 import org.jline.reader.impl.DefaultParser.Bracket
 import org.jline.reader.impl.LineReaderImpl
+import org.jline.terminal.Size
 import org.jline.terminal.Terminal
 import org.jline.terminal.TerminalBuilder
 import org.jline.utils.OSUtils
@@ -37,6 +41,7 @@ class GrinShell {
     final InputStream input
     final OutputStream output
     final Map<String, ?> initialBindings = [:]
+    final Environment environment = null
 
     @SuppressWarnings('GroovyResultOfObjectAllocationIgnored')
     int start() {
@@ -49,19 +54,33 @@ class GrinShell {
                 .lineCommentDelims(new String[]{'//'})
                 .setEofOnUnclosedBracket(Bracket.CURLY, Bracket.ROUND, Bracket.SQUARE)
 
+        def sshEnvironment = environment?.env ?: [:]
         def terminal = TerminalBuilder.builder()
                 .streams(input, output)
                 .system(false)
                 .name('grin')
+                .type(sshEnvironment[Environment.ENV_TERM] ?: 'xterm-256color')
+                .size(terminalSize(sshEnvironment))
                 .build()
+
+        SignalListener resizeListener
+        if (environment != null) {
+            resizeListener = new GrinSignalListener(() -> {
+                terminal.setSize(terminalSize(environment.env))
+                terminal.raise(Terminal.Signal.WINCH)
+            })
+            environment.addSignalListener(resizeListener, Signal.WINCH)
+        }
 
         def rootURL = Main.getResource('/nanorc')
         def root = resolveResourcePath(rootURL)
         def userState = Paths.get(System.getProperty('user.home'), '.groovy')
         def configPath = new ConfigurationPath(root, userState)
         def scriptEngine = new GroovyEngine()
+        def grin = new GrinApi()
 
         initialBindings.each { k, v -> if (k != null) scriptEngine.put(k, v) }
+        scriptEngine.put('grin', grin)
         scriptEngine.put('ROOT', rootURL.toString())
         scriptEngine.put(GroovyEngine.NANORC_VALUE, rootURL.toString())
         scriptEngine.put('CONSOLE_OPTIONS', [:])
@@ -139,12 +158,12 @@ class GrinShell {
         new AutosuggestionWidgets(reader).inspect()
 
         def writer = new PrintWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8), true)
+        def dashboard = new GrinDashboard(terminal, grin.header)
 
         appendRuntimeJarsToClasspath systemRegistry
 
         writer.println()
         writer.println render('Groovy Introspective', 'green')
-        writer.println(render('JVM: ') + render("${Runtime.version()}", 'bold'))
         writer.println(render('Type \'')
                 + render('/help', 'bold')
                 + render('\' for help, \'')
@@ -152,24 +171,48 @@ class GrinShell {
                 + render('\' to exit.'))
         writer.println()
 
-        while (true) {
-            try {
-                systemRegistry.cleanUp()
+        boolean liveDashboard = dashboard.start()
+        if (!liveDashboard) dashboard.printSnapshot(writer)
 
-                def line = reader.readLine(render('grin', 'green') + render('> '))
-                def result = systemRegistry.execute(line)
+        try {
+            while (true) {
+                try {
+                    systemRegistry.cleanUp()
 
-                consoleEngine.println(result?.toString())
-            } catch (UserInterruptException ignored) {
-                // ignore
-            } catch (EndOfFileException ignored) {
-                break
-            } catch (Throwable t) {
-                systemRegistry.trace(t)
+                    def line = reader.readLine(render('grin', 'green') + render('> '))
+                    def result = systemRegistry.execute(line)
+
+                    consoleEngine.println(result?.toString())
+                } catch (UserInterruptException ignored) {
+                    // ignore
+                } catch (EndOfFileException ignored) {
+                    break
+                } catch (Throwable t) {
+                    systemRegistry.trace(t)
+                }
             }
+        } finally {
+            dashboard.close()
+            if (resizeListener != null) environment.removeSignalListener(resizeListener)
+            systemRegistry.close()
+            terminal.close()
         }
-        systemRegistry.close()
         return 0
+    }
+
+    private static Size terminalSize(Map<String, String> environment) {
+        int columns = positiveInt(environment[Environment.ENV_COLUMNS], 120)
+        int rows = positiveInt(environment[Environment.ENV_LINES], 30)
+        return Size.of(columns, rows)
+    }
+
+    private static int positiveInt(String value, int fallback) {
+        try {
+            int parsed = Integer.parseInt(value)
+            return parsed > 0 ? parsed : fallback
+        } catch (RuntimeException ignored) {
+            return fallback
+        }
     }
 
     private static void appendRuntimeJarsToClasspath(GroovySystemRegistry systemRegistry) {
