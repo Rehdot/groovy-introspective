@@ -102,9 +102,10 @@ class GrinDashboard implements AutoCloseable {
                     field(builder, 'STATES', stateSummary(states))
                 },
                 line { AttributedStringBuilder builder ->
-                    field(builder, 'CLASSES', "${number(classes.loadedClassCount)} loaded - ${number(classes.totalLoadedClassCount)} total - ${number(classes.unloadedClassCount)} unloaded")
-                    divider(builder)
                     field(builder, 'GC', gcSummary())
+                },
+                line { AttributedStringBuilder builder ->
+                    field(builder, 'CLASSES', "${number(classes.loadedClassCount)} loaded - ${number(classes.totalLoadedClassCount)} total - ${number(classes.unloadedClassCount)} unloaded")
                 }
         ]
 
