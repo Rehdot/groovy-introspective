@@ -203,7 +203,7 @@ class GrinShell {
     private static Size terminalSize(Map<String, String> environment) {
         int columns = positiveInt(environment[Environment.ENV_COLUMNS], 120)
         int rows = positiveInt(environment[Environment.ENV_LINES], 30)
-        return Size.of(columns, rows)
+        return new Size(columns, rows)
     }
 
     private static int positiveInt(String value, int fallback) {

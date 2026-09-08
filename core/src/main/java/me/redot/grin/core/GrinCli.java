@@ -15,7 +15,7 @@ class GrinCli {
 
     public static void main(String[] args) {
         if (args.length == 0) {
-            printUsage();
+            JvmSelector.select().ifPresent(GrinCli::attach);
             return;
         }
 
@@ -60,6 +60,7 @@ class GrinCli {
     }
 
     private static void attach(String pid) {
+        System.out.println("Attaching to JVM " + pid + "...");
         try {
             String agentJarPath = copyAgentJarToTemp();
             int port = findFreePort();

@@ -27,8 +27,8 @@ tasks.register('installGrin', Copy) {
     group = 'grin'
     description = 'Rebuilds agent and core, then installs the core JAR in ~/.grin/bin.'
 
-    dependsOn ':agent:shadowJar', ':core:jar'
-    from { project(':core').tasks.named('jar').get().archiveFile.get().asFile }
+    dependsOn ':agent:shadowJar', ':core:shadowJar'
+    from { project(':core').tasks.named('shadowJar').get().archiveFile.get().asFile }
     into grinInstallDirectory
 
     doLast {
@@ -39,7 +39,7 @@ tasks.register('installGrin', Copy) {
 gradle.projectsEvaluated {
     def agentJar = project(':agent').tasks.named('shadowJar')
     def coreCompile = project(':core').tasks.named('compileJava')
-    def coreJar = project(':core').tasks.named('jar')
+    def coreJar = project(':core').tasks.named('shadowJar')
 
     coreCompile.configure { mustRunAfter agentJar }
     coreJar.configure { mustRunAfter agentJar }
