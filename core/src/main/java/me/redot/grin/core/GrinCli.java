@@ -44,7 +44,7 @@ class GrinCli {
     }
 
     private static void listJvms() {
-        List<VirtualMachineDescriptor> vms = VirtualMachine.list();
+        List<VirtualMachineDescriptor> vms = JvmSelector.availableJvms();
         System.out.println();
 
         if (vms.isEmpty()) {

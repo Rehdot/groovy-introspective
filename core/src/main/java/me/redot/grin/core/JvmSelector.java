@@ -2,18 +2,15 @@ package me.redot.grin.core;
 
 import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.VirtualMachineDescriptor;
-import org.jline.reader.Candidate;
-import org.jline.reader.EndOfFileException;
-import org.jline.reader.LineReader;
-import org.jline.reader.LineReaderBuilder;
-import org.jline.reader.Reference;
-import org.jline.reader.UserInterruptException;
+import org.jline.keymap.KeyMap;
+import org.jline.reader.*;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import org.jline.utils.AttributedStringBuilder;
 import org.jline.utils.AttributedStyle;
 
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -32,10 +29,7 @@ final class JvmSelector {
             return Optional.empty();
         }
 
-        try (Terminal terminal = TerminalBuilder.builder()
-                .name("grin")
-                .system(true)
-                .build()) {
+        try (Terminal terminal = TerminalBuilder.builder().name("grin").system(true).build()) {
             LineReader reader = LineReaderBuilder.builder()
                     .appName("grin")
                     .terminal(terminal)
@@ -44,8 +38,9 @@ final class JvmSelector {
                     .option(LineReader.Option.LIST_ROWS_FIRST, true)
                     .option(LineReader.Option.EMPTY_WORD_OPTIONS, false)
                     .build();
-            reader.getKeyMaps().values().forEach(keyMap ->
-                    keyMap.bind(new Reference(LineReader.MENU_COMPLETE), "\t"));
+            for (KeyMap<Binding> keyMap : reader.getKeyMaps().values()) {
+                keyMap.bind(new Reference(LineReader.MENU_COMPLETE), "\t");
+            }
 
             printIntroduction(terminal, initial.size());
 
@@ -62,20 +57,34 @@ final class JvmSelector {
                 if (selection.isEmpty()) {
                     continue;
                 }
-                if (selection.chars().allMatch(Character::isDigit)) {
-                    return Optional.of(selection);
+
+                Optional<String> pid = parsePid(selection);
+                if (pid.isPresent()) {
+                    return pid;
                 }
 
                 reader.printAbove(styled(terminal, builder -> builder
                         .styled(AttributedStyle.DEFAULT.foreground(AttributedStyle.RED), "Enter a PID or press Tab to choose a JVM.")));
             }
         } catch (IOException failure) {
-            System.err.println("Unable to open an interactive terminal: " + failure.getMessage());
+            System.err.println("Unable to open terminal: " + failure.getMessage());
             return Optional.empty();
         }
     }
 
-    private static List<VirtualMachineDescriptor> availableJvms() {
+    public static Optional<String> parsePid(String str) {
+        String[] split = str.trim().split("\\D");
+        if (split.length < 1) return Optional.empty();
+
+        String first = split[0];
+        if (first.chars().allMatch(Character::isDigit)) {
+            return Optional.of(first);
+        }
+
+        return Optional.empty();
+    }
+
+    public static List<VirtualMachineDescriptor> availableJvms() {
         String currentPid = Long.toString(ProcessHandle.current().pid());
         return VirtualMachine.list().stream()
                 .filter(vm -> !vm.id().equals(currentPid))
@@ -86,9 +95,9 @@ final class JvmSelector {
     private static void addCandidates(Terminal terminal, List<Candidate> candidates) {
         int nameWidth = Math.max(16, terminal.getColumns() - 16);
         for (VirtualMachineDescriptor vm : availableJvms()) {
-            String display = String.format("%-8s %s", vm.id(), abbreviate(displayName(vm), nameWidth));
+            String display = String.format("%-8s %s", vm.id(), truncate(displayName(vm), nameWidth));
             candidates.add(new Candidate(
-                    vm.id(),
+                    display,
                     display,
                     null,
                     null,
@@ -101,14 +110,15 @@ final class JvmSelector {
     }
 
     private static void printIntroduction(Terminal terminal, int count) {
-        terminal.writer().println();
-        terminal.writer().println(styled(terminal, builder -> builder
+        PrintWriter writer = terminal.writer();
+        writer.println();
+        writer.println(styled(terminal, builder -> builder
                 .styled(GREEN_BOLD, "Groovy Introspective")));
-        terminal.writer().println(styled(terminal, builder ->
+        writer.println(styled(terminal, builder ->
                 builder.append(String.valueOf(count))
                         .append(count == 1 ? " JVM available. " : " JVMs available. ")
                 .styled(MUTED, "Type a PID or press Tab to choose.")));
-        terminal.writer().println();
+        writer.println();
         terminal.flush();
     }
 
@@ -123,11 +133,11 @@ final class JvmSelector {
         return name.isEmpty() ? "unknown JVM" : name;
     }
 
-    private static String abbreviate(String value, int maximumLength) {
+    private static String truncate(String value, int maximumLength) {
         if (value.length() <= maximumLength) {
             return value;
         }
-        return value.substring(0, Math.max(1, maximumLength - 1)) + "…";
+        return value.substring(0, Math.max(1, maximumLength - 1)) + "...";
     }
 
     private static long numericPid(VirtualMachineDescriptor vm) {
