@@ -20,7 +20,7 @@ import org.jline.reader.impl.DefaultParser.Bracket
 import org.jline.reader.impl.LineReaderImpl
 import org.jline.terminal.Size
 import org.jline.terminal.Terminal
-import org.jline.terminal.TerminalBuilder
+import org.jline.terminal.impl.ExternalTerminal
 import org.jline.utils.OSUtils
 import org.jline.widget.AutosuggestionWidgets
 import org.jline.widget.TailTipWidgets
@@ -31,7 +31,6 @@ import java.nio.file.FileSystems
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.nio.file.StandardCopyOption
 
 import static org.jline.jansi.AnsiRenderer.render
 
@@ -57,13 +56,14 @@ class GrinShell {
                 .setEofOnUnclosedBracket(Bracket.CURLY, Bracket.ROUND, Bracket.SQUARE)
 
         def sshEnvironment = environment?.env ?: [:]
-        def terminal = TerminalBuilder.builder()
-                .streams(input, output)
-                .system(false)
-                .name('grin')
-                .type(sshEnvironment[Environment.ENV_TERM] ?: 'xterm-256color')
-                .size(terminalSize(sshEnvironment))
-                .build()
+        def terminal = new ExternalTerminal(
+                'grin',
+                sshEnvironment[Environment.ENV_TERM] ?: 'xterm-256color',
+                input,
+                output,
+                StandardCharsets.UTF_8
+        )
+        terminal.setSize(terminalSize(sshEnvironment))
 
         SignalListener resizeListener
         if (environment != null) {
@@ -76,7 +76,7 @@ class GrinShell {
 
         def rootURL = Main.getResource('/nanorc')
         def userState = createUserState()
-        def root = createConfig(rootURL, userState)
+        def root = resolveResourcePath(rootURL)
         def configPath = new ConfigurationPath(root, userState)
         def scriptEngine = new GroovyEngine()
         def grin = new GrinApi()
@@ -117,7 +117,7 @@ class GrinShell {
         def workDir = Paths.get(System.getProperty('user.dir'))
         def groovy = new GroovyCommands(scriptEngine, { workDir }, printer, null)
         def consoleEngine = new GroovyConsoleEngine(scriptEngine, printer, { workDir }, configPath, reader)
-        def builtins = new GroovyBuiltins(scriptEngine, { workDir }, configPath, reader, null)
+        def builtins = GrinBuiltinsFactory.create({ workDir }, configPath, reader, null)
 
         def systemRegistry = new GroovySystemRegistry(
                 parser,
@@ -230,29 +230,6 @@ class GrinShell {
         } catch (ignored) {
             return null
         }
-    }
-
-    private static Path createConfig(URL sourceUrl, Path userState) {
-        Path source = resolveResourcePath(sourceUrl)
-        Path destination = userState != null
-                ? userState.resolve('runtime/nanorc')
-                : Files.createTempDirectory('grin-nanorc-')
-
-        Files.createDirectories(destination)
-        def paths = Files.walk(source)
-        try {
-            paths.forEach { Path path ->
-                Path target = destination.resolve(source.relativize(path).toString())
-                if (Files.isDirectory(path)) {
-                    Files.createDirectories(target)
-                } else {
-                    Files.copy(path, target, StandardCopyOption.REPLACE_EXISTING)
-                }
-            }
-        } finally {
-            paths.close()
-        }
-        return destination
     }
 
     private static Size terminalSize(Map<String, String> environment) {

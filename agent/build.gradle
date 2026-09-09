@@ -19,14 +19,14 @@ dependencies {
     implementation 'org.apache.groovy:groovy:5.0.8'
     implementation 'org.apache.groovy:groovy-groovysh:5.0.8'
 
-    implementation 'org.jline:jline:4.4.2'
+    implementation 'org.jline:jline-console:3.30.9'
+    implementation 'org.jline:jansi:3.30.9'
 
     testImplementation platform('org.junit:junit-bom:5.10.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 
     implementation 'org.apache.sshd:sshd-core:2.19.0'
-//    implementation 'org.apache.sshd:sshd-common:2.19.0'
     implementation 'org.slf4j:slf4j-simple:2.0.17'
 }
 
@@ -47,6 +47,15 @@ compileGroovy {
 shadowJar {
     archiveClassifier = ''
     mergeServiceFiles()
+    mergeServiceFiles('META-INF/jline/providers')
+
+    relocate 'org.apache.groovy.groovysh', 'me.redot.grin.shaded.org.apache.groovy.groovysh'
+    relocate 'org.jline', 'me.redot.grin.shaded.org.jline'
+    relocate 'org.apache.sshd', 'me.redot.grin.shaded.org.apache.sshd'
+    relocate 'org.slf4j', 'me.redot.grin.shaded.org.slf4j'
+    relocate 'org.apache.commons.logging', 'me.redot.grin.shaded.org.apache.commons.logging'
+    relocate 'org.objectweb.asm', 'me.redot.grin.shaded.org.objectweb.asm'
+    relocate 'org.apache.ivy', 'me.redot.grin.shaded.org.apache.ivy'
 
     exclude 'groovy/console/**'
     exclude 'groovy/ui/**'
