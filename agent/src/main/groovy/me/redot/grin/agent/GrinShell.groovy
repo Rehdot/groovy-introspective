@@ -175,6 +175,8 @@ class GrinShell {
         if (!liveDashboard) dashboard.printSnapshot(writer)
 
         try {
+            getScriptFile("attach").ifPresent { scriptEngine.execute(it) }
+
             while (true) {
                 try {
                     systemRegistry.cleanUp()
@@ -192,12 +194,23 @@ class GrinShell {
                 }
             }
         } finally {
+            getScriptFile("detach").ifPresent { scriptEngine.execute(it) }
             dashboard.close()
             if (resizeListener != null) environment.removeSignalListener(resizeListener)
             systemRegistry.close()
             terminal.close()
         }
         return 0
+    }
+
+    private static Optional<File> getScriptFile(String name) {
+        def home = System.getenv('USERPROFILE') ?: System.getProperty('user.home')
+        if (!home) return Optional.empty()
+
+        def file = "${home}/.grin/bin/scripts/${name}.groovy" as File
+        if (file.exists()) return Optional.of(file)
+
+        Optional.empty()
     }
 
     private static Size terminalSize(Map<String, String> environment) {
