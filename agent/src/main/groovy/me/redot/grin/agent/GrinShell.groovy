@@ -28,8 +28,10 @@ import org.jline.widget.TailTipWidgets
 import java.nio.charset.StandardCharsets
 import java.nio.file.FileSystemAlreadyExistsException
 import java.nio.file.FileSystems
+import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
+import java.nio.file.StandardCopyOption
 
 import static org.jline.jansi.AnsiRenderer.render
 
@@ -51,7 +53,7 @@ class GrinShell {
                 eofOnEscapedNewLine: true
         )
         parser.blockCommentDelims(new DefaultParser.BlockCommentDelims('/*', '*/'))
-                .lineCommentDelims(new String[]{'//'})
+                .lineCommentDelims(new String[]{'// '})
                 .setEofOnUnclosedBracket(Bracket.CURLY, Bracket.ROUND, Bracket.SQUARE)
 
         def sshEnvironment = environment?.env ?: [:]
@@ -73,8 +75,8 @@ class GrinShell {
         }
 
         def rootURL = Main.getResource('/nanorc')
-        def root = resolveResourcePath(rootURL)
-        def userState = Paths.get(System.getProperty('user.home'), '.groovy')
+        def userState = createUserState()
+        def root = createConfig(rootURL, userState)
         def configPath = new ConfigurationPath(root, userState)
         def scriptEngine = new GroovyEngine()
         def grin = new GrinApi()
@@ -88,18 +90,22 @@ class GrinShell {
 
         def printer = new DefaultPrinter(scriptEngine, configPath)
 
-        def reader = (LineReaderImpl) LineReaderBuilder.builder()
+        def readerBuilder = LineReaderBuilder.builder()
                 .terminal(terminal)
                 .parser(parser)
                 .variable(LineReader.SECONDARY_PROMPT_PATTERN, "%M%P > ")
                 .variable(LineReader.INDENTATION, 2)
                 .variable(LineReader.LIST_MAX, 100)
-                .variable(LineReader.HISTORY_FILE, configPath.getUserConfig('groovysh_history', true))
                 .option(LineReader.Option.INSERT_BRACKET, true)
                 .option(LineReader.Option.EMPTY_WORD_OPTIONS, false)
                 .option(LineReader.Option.USE_FORWARD_SLASH, true)
                 .option(LineReader.Option.DISABLE_EVENT_EXPANSION, true)
-                .build()
+
+        if (userState) {
+            readerBuilder.variable(LineReader.HISTORY_FILE, userState.resolve('history'))
+        }
+
+        def reader = (LineReaderImpl) readerBuilder.build()
 
         if (OSUtils.IS_WINDOWS) {
             reader.setVariable(LineReader.BLINK_MATCHING_PAREN, 0)
@@ -211,6 +217,42 @@ class GrinShell {
         if (file.exists()) return Optional.of(file)
 
         Optional.empty()
+    }
+
+    private static Path createUserState() {
+        String home = System.getenv('USERPROFILE') ?: System.getProperty('user.home')
+        if (!home) return null
+
+        try {
+            Path state = Paths.get(home, '.grin')
+            Files.createDirectories(state)
+            return state
+        } catch (ignored) {
+            return null
+        }
+    }
+
+    private static Path createConfig(URL sourceUrl, Path userState) {
+        Path source = resolveResourcePath(sourceUrl)
+        Path destination = userState != null
+                ? userState.resolve('runtime/nanorc')
+                : Files.createTempDirectory('grin-nanorc-')
+
+        Files.createDirectories(destination)
+        def paths = Files.walk(source)
+        try {
+            paths.forEach { Path path ->
+                Path target = destination.resolve(source.relativize(path).toString())
+                if (Files.isDirectory(path)) {
+                    Files.createDirectories(target)
+                } else {
+                    Files.copy(path, target, StandardCopyOption.REPLACE_EXISTING)
+                }
+            }
+        } finally {
+            paths.close()
+        }
+        return destination
     }
 
     private static Size terminalSize(Map<String, String> environment) {
