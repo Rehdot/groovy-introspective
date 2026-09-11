@@ -5,11 +5,8 @@ import java.net.URL;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-/// A classloader that delegates loadClass calls to every distinct
-/// ClassLoader instance currently live in the target JVM. Because it calls
-/// loadClass() on those loaders rather than redefining their classes from
-/// jar bytes, it preserves class identity with whatever the running
-/// application is already using.
+/// A classloader that exposes classes already loaded in the target JVM.
+/// Resolution returns the exact class instances reported by Instrumentation.
 /// <p>
 /// This is generally an awful approach to loading classes. However, in a
 /// scripting environment where performance isn't the top priority, it's okay.
@@ -19,8 +16,8 @@ public class AggregateClassLoader extends ClassLoader {
     private final List<ClassLoader> delegates = new ArrayList<>();
     private final Map<String, Class<?>> resolved = new ConcurrentHashMap<>();
     private final Set<ClassLoader> seen = Collections.newSetFromMap(new IdentityHashMap<>());
-    private final ThreadLocal<Set<String>> processingClasses = ThreadLocal.withInitial(HashSet::new);
     private final ThreadLocal<Set<String>> processingResources = ThreadLocal.withInitial(HashSet::new);
+    private volatile Map<String, Class<?>> loadedClasses = Collections.emptyMap();
 
     public AggregateClassLoader(ClassLoader parent, Instrumentation inst) {
         super(parent);
@@ -29,9 +26,10 @@ public class AggregateClassLoader extends ClassLoader {
     }
 
     private synchronized void refreshDelegates() {
+        Class<?>[] classes = this.inst.getAllLoadedClasses();
         Map<ClassLoader, Integer> counts = new IdentityHashMap<>();
 
-        for (Class<?> clazz : this.inst.getAllLoadedClasses()) {
+        for (Class<?> clazz : classes) {
             ClassLoader cl = clazz.getClassLoader();
             if (cl == null || cl == this) continue;
             if (this.delegatesToSelf(cl)) continue;
@@ -46,6 +44,25 @@ public class AggregateClassLoader extends ClassLoader {
                 this.delegates.add(cl);
             }
         }
+
+        Map<ClassLoader, Integer> rankedLoaders = new IdentityHashMap<>();
+        rankedLoaders.put(null, -1);
+        for (int i = 0; i < fresh.size(); i++) {
+            rankedLoaders.put(fresh.get(i), i);
+        }
+
+        Map<String, Class<?>> loaded = new HashMap<>();
+        for (Class<?> clazz : classes) {
+            if (clazz == null) continue;
+
+            loaded.merge(clazz.getName(), clazz, (current, candidate) -> {
+                int currentRank = rankedLoaders.getOrDefault(current.getClassLoader(), Integer.MAX_VALUE);
+                int candidateRank = rankedLoaders.getOrDefault(candidate.getClassLoader(), Integer.MAX_VALUE);
+                return candidateRank < currentRank ? candidate : current;
+            });
+        }
+
+        this.loadedClasses = Collections.unmodifiableMap(loaded);
     }
 
     private boolean delegatesToSelf(ClassLoader cl) {
@@ -77,41 +94,18 @@ public class AggregateClassLoader extends ClassLoader {
         Class<?> cached = this.resolved.get(name);
         if (cached != null) return cached;
 
-        Set<String> processing = this.processingClasses.get();
-        if (!processing.add(name)) {
-            throw new ClassNotFoundException(name + " (cyclic delegation)");
+        Class<?> result = this.loadedClasses.get(name);
+        if (result == null) {
+            this.refreshDelegates();
+            result = this.loadedClasses.get(name);
         }
 
-        try {
-            Class<?> result = this.resolveUncached(name);
-            this.resolved.put(name, result);
-            return result;
-        } finally {
-            processing.remove(name);
-        }
-    }
-
-    private Class<?> resolveUncached(String name) throws ClassNotFoundException {
-        try {
-            return this.getParent().loadClass(name);
-        } catch (ClassNotFoundException | LinkageError ignored) {}
-
-        for (ClassLoader cl : this.delegates) {
-            if (cl == null || cl == this) continue;
-            try {
-                return cl.loadClass(name);
-            } catch (ClassNotFoundException | LinkageError ignored) {}
+        if (result == null) {
+            result = this.getParent().loadClass(name);
         }
 
-        this.refreshDelegates();
-        for (ClassLoader cl : this.delegates) {
-            if (cl == null || cl == this) continue;
-            try {
-                return cl.loadClass(name);
-            } catch (ClassNotFoundException | LinkageError ignored) {}
-        }
-
-        throw new ClassNotFoundException(name);
+        Class<?> existing = this.resolved.putIfAbsent(name, result);
+        return existing != null ? existing : result;
     }
 
     @Override

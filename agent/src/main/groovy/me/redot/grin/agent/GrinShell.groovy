@@ -1,8 +1,12 @@
 package me.redot.grin.agent
 
 import groovy.transform.Canonical
+import me.redot.grin.agent.completion.NamespaceClassCompleter
 import org.apache.groovy.groovysh.Main
-import org.apache.groovy.groovysh.jline.*
+import org.apache.groovy.groovysh.jline.GroovyCommands
+import org.apache.groovy.groovysh.jline.GroovyConsoleEngine
+import org.apache.groovy.groovysh.jline.GroovyEngine
+import org.apache.groovy.groovysh.jline.GroovySystemRegistry
 import org.apache.sshd.server.Environment
 import org.apache.sshd.server.Signal
 import org.apache.sshd.server.SignalListener
@@ -26,11 +30,7 @@ import org.jline.widget.AutosuggestionWidgets
 import org.jline.widget.TailTipWidgets
 
 import java.nio.charset.StandardCharsets
-import java.nio.file.FileSystemAlreadyExistsException
-import java.nio.file.FileSystems
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
+import java.nio.file.*
 
 import static org.jline.jansi.AnsiRenderer.render
 
@@ -128,6 +128,7 @@ class GrinShell {
             setCommandRegistries(consoleEngine, builtins, groovy)
             groupCommandsInHelp(false)
             setScriptDescription(scriptEngine.&scriptDescription)
+            addCompleter(new NamespaceClassCompleter(GrinAgent.getNamespaceIndex()))
             addCompleter(scriptEngine.scriptCompleter)
 
             renameLocal('exit', '/exit')
@@ -165,8 +166,6 @@ class GrinShell {
 
         def writer = new PrintWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8), true)
         def dashboard = new GrinDashboard(terminal, grin.header)
-
-        appendRuntimeJarsToClasspath systemRegistry
 
         writer.println()
         writer.println render('Groovy Introspective', 'green')
@@ -245,16 +244,6 @@ class GrinShell {
         } catch (RuntimeException ignored) {
             return fallback
         }
-    }
-
-    private static void appendRuntimeJarsToClasspath(GroovySystemRegistry systemRegistry) {
-        new Thread({
-            GrinAgent.RUNTIME_JAR_PATHS.each { path ->
-                try {
-                    systemRegistry.invoke('/classloader', "--add=$path")
-                } catch (Exception ignored) {}
-            }
-        }, "grin-classloader-worker").start()
     }
 
     private static Path resolveResourcePath(URL url) {
