@@ -51,17 +51,17 @@ class GroovyshCommand implements Command, Runnable {
         int exitCode = 0
 
         try {
-            System.err.println("[grin] Starting Groovy shell...")
+            println "[grin] Starting Groovy shell..."
             def shell = new GrinShell(input, output, [:], environment)
             exitCode = shell.start()
-            System.err.println("[grin] Groovy shell returned: $exitCode")
+            println "[grin] Groovy shell returned: $exitCode"
         } catch (Throwable t) {
             System.err.println("[grin] Groovy shell crashed:")
             t.printStackTrace()
             t.printStackTrace(new PrintStream(this.error, true))
             exitCode = 1
         } finally {
-            System.err.println("[grin] Closing SSH shell...")
+            println "[grin] Closing SSH shell..."
             exitCallback.onExit(exitCode)
         }
     }
