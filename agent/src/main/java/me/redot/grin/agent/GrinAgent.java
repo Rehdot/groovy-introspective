@@ -21,16 +21,14 @@ public class GrinAgent {
         instrumentation = inst;
 
         new Thread(GrinAgent::refreshRuntimeJarPaths).start();
-        AggregateClassLoader aggregate = new AggregateClassLoader(GrinAgent.class.getClassLoader(), inst);
-        aggregateClassLoader = aggregate;
-        System.out.println("[grin-agent] aggregate classloader built from " + inst.getAllLoadedClasses().length + " loaded classes");
+        aggregateClassLoader = new AggregateClassLoader(GrinAgent.class.getClassLoader(), inst);
 
         Thread thread = Thread.currentThread();
         ClassLoader previous = thread.getContextClassLoader();
-        thread.setContextClassLoader(aggregate);
+        thread.setContextClassLoader(aggregateClassLoader);
 
         try {
-            Class<?> sessionClass = aggregate.loadClass("me.redot.grin.agent.GrinSession");
+            Class<?> sessionClass = aggregateClassLoader.loadClass("me.redot.grin.agent.GrinSession");
             Object session = sessionClass.getDeclaredConstructor().newInstance();
             sessionClass.getMethod("start", String.class).invoke(session, agentArgs);
         } finally {
