@@ -42,7 +42,7 @@ class GroovyshCommand implements Command, Runnable {
 
         this.worker = new Thread(this, 'grin-session')
         this.worker.daemon = true
-        this.worker.contextClassLoader = GrinAgent.getShellClassLoader()
+        this.worker.contextClassLoader = AggregateClassLoader.getInstance()
         this.worker.start()
     }
 

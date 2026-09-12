@@ -15,20 +15,26 @@ public class GrinAgent {
 
     private static final NamespaceClassIndex NAMESPACE_INDEX = new NamespaceClassIndex();
     private static volatile Instrumentation instrumentation;
-    private static volatile AggregateClassLoader aggregateClassLoader;
 
-    public static void agentmain(String agentArgs, Instrumentation inst) throws Exception {
+    public static synchronized void agentmain(String agentArgs, Instrumentation inst) throws Exception {
         instrumentation = inst;
 
         new Thread(GrinAgent::refreshRuntimeJarPaths).start();
-        aggregateClassLoader = new AggregateClassLoader(GrinAgent.class.getClassLoader(), inst);
+
+        AggregateClassLoader aggregate = AggregateClassLoader.getInstance();
+        if (aggregate == null) {
+            aggregate = new AggregateClassLoader(GrinAgent.class.getClassLoader(), inst);
+            AggregateClassLoader.setInstance(aggregate);
+        } else {
+            aggregate.refreshDelegates();
+        }
 
         Thread thread = Thread.currentThread();
         ClassLoader previous = thread.getContextClassLoader();
-        thread.setContextClassLoader(aggregateClassLoader);
+        thread.setContextClassLoader(aggregate);
 
         try {
-            Class<?> sessionClass = aggregateClassLoader.loadClass("me.redot.grin.agent.GrinSession");
+            Class<?> sessionClass = aggregate.loadClass("me.redot.grin.agent.GrinSession");
             Object session = sessionClass.getDeclaredConstructor().newInstance();
             sessionClass.getMethod("start", String.class).invoke(session, agentArgs);
         } finally {
@@ -65,10 +71,6 @@ public class GrinAgent {
 
     public static NamespaceClassIndex getNamespaceIndex() {
         return NAMESPACE_INDEX;
-    }
-
-    public static ClassLoader getShellClassLoader() {
-        return aggregateClassLoader;
     }
 
     public static String parseArg(String agentArgs, String key) {

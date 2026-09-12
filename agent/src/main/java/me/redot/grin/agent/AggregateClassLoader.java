@@ -12,12 +12,17 @@ import java.util.concurrent.ConcurrentHashMap;
 /// scripting environment where performance isn't the top priority, it's okay.
 public class AggregateClassLoader extends ClassLoader {
 
+    private static volatile AggregateClassLoader instance;
+
+    private static final long REFRESH_INTERVAL = 1000;
+
     private final Instrumentation inst;
     private final List<ClassLoader> delegates = new ArrayList<>();
     private final Map<String, Class<?>> resolved = new ConcurrentHashMap<>();
     private final Set<ClassLoader> seen = Collections.newSetFromMap(new IdentityHashMap<>());
     private final ThreadLocal<Set<String>> processingResources = ThreadLocal.withInitial(HashSet::new);
     private volatile Map<String, Class<?>> loadedClasses = Collections.emptyMap();
+    private volatile long lastRefreshMS;
 
     public AggregateClassLoader(ClassLoader parent, Instrumentation inst) {
         super(parent);
@@ -25,7 +30,7 @@ public class AggregateClassLoader extends ClassLoader {
         this.refreshDelegates();
     }
 
-    private synchronized void refreshDelegates() {
+    public synchronized void refreshDelegates() {
         Class<?>[] classes = this.inst.getAllLoadedClasses();
         Map<ClassLoader, Integer> counts = new IdentityHashMap<>();
 
@@ -63,6 +68,15 @@ public class AggregateClassLoader extends ClassLoader {
         }
 
         this.loadedClasses = Collections.unmodifiableMap(loaded);
+        this.lastRefreshMS = System.currentTimeMillis();
+    }
+
+    public static AggregateClassLoader getInstance() {
+        return instance;
+    }
+
+    public static void setInstance(AggregateClassLoader loader) {
+        instance = loader;
     }
 
     private boolean delegatesToSelf(ClassLoader cl) {
@@ -95,7 +109,7 @@ public class AggregateClassLoader extends ClassLoader {
         if (cached != null) return cached;
 
         Class<?> result = this.loadedClasses.get(name);
-        if (result == null) {
+        if (result == null && this.canRefresh()) {
             this.refreshDelegates();
             result = this.loadedClasses.get(name);
         }
@@ -106,6 +120,10 @@ public class AggregateClassLoader extends ClassLoader {
 
         Class<?> existing = this.resolved.putIfAbsent(name, result);
         return existing != null ? existing : result;
+    }
+
+    private boolean canRefresh() {
+        return System.currentTimeMillis() - this.lastRefreshMS >= REFRESH_INTERVAL;
     }
 
     @Override

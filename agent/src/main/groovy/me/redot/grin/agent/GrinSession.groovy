@@ -13,6 +13,8 @@ import java.time.Duration
 @CompileStatic
 class GrinSession {
 
+    private static SshServer server
+
     void start(String agentArgs) throws Exception {
         int port = Integer.parseInt(GrinAgent.parseArg(agentArgs, "port"))
 
@@ -35,9 +37,24 @@ class GrinSession {
         CoreModuleProperties.IDLE_TIMEOUT.set(sshd, Duration.ZERO)
         CoreModuleProperties.NIO2_READ_TIMEOUT.set(sshd, Duration.ZERO)
 
-        sshd.start()
+        replaceServer(sshd)
 
         System.out.println("[grin-agent] SSHD listening on port " + port)
+    }
+
+    private static synchronized void replaceServer(SshServer replacement) throws IOException {
+        if (server != null) {
+            try {
+                server.stop(true)
+            } catch (IOException failure) {
+                System.err.println("[grin-agent] unable to stop previous SSHD: $failure.message")
+            } finally {
+                server = null
+            }
+        }
+
+        replacement.start()
+        server = replacement
     }
 
 }
