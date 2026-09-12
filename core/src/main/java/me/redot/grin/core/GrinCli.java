@@ -4,11 +4,14 @@ import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.VirtualMachineDescriptor;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 
 class GrinCli {
@@ -62,7 +65,7 @@ class GrinCli {
     private static void attach(String pid) {
         System.out.println("Attaching to JVM " + pid + "...");
         try {
-            String agentJarPath = copyAgentJarToTemp();
+            String agentJarPath = copyAgentJarToCache();
             int port = findFreePort();
             VirtualMachine vm = VirtualMachine.attach(pid);
             
@@ -78,16 +81,50 @@ class GrinCli {
         }
     }
 
-    private static String copyAgentJarToTemp() throws IOException {
-        try (var input = GrinCli.class.getResourceAsStream("/agent-1.0.0.jar")) {
-            if (input == null) {
+    private static String copyAgentJarToCache() throws IOException {
+        Path cacheDir = Path.of(System.getProperty("user.home"), ".grin", "cache");
+        Files.createDirectories(cacheDir);
+        Path staged = Files.createTempFile(cacheDir, "grin-agent-", ".tmp");
+        MessageDigest digest = sha256();
+
+        try (InputStream resource = GrinCli.class.getResourceAsStream("/agent-1.0.0.jar")) {
+            if (resource == null) {
                 throw new IllegalArgumentException("agent jar is missing...");
             }
 
-            Path temp = Files.createTempFile("grin-agent", ".jar");
-            temp.toFile().deleteOnExit();
-            Files.copy(input, temp, StandardCopyOption.REPLACE_EXISTING);
-            return temp.toAbsolutePath().toString();
+            try (DigestInputStream input = new DigestInputStream(resource, digest)) {
+                Files.copy(input, staged, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (Exception exception) {
+            Files.deleteIfExists(staged);
+            throw exception;
+        }
+
+        Path cached = cacheDir.resolve("grin-agent-" + HexFormat.of().formatHex(digest.digest()) + ".jar");
+        try {
+            if (!Files.exists(cached)) {
+                try {
+                    try {
+                        Files.move(staged, cached, StandardCopyOption.ATOMIC_MOVE);
+                    } catch (AtomicMoveNotSupportedException ignored) {
+                        Files.move(staged, cached);
+                    }
+                } catch (FileAlreadyExistsException ignored) {
+                    // another grin process created the same agent
+                }
+            }
+        } finally {
+            Files.deleteIfExists(staged);
+        }
+
+        return cached.toAbsolutePath().toString();
+    }
+
+    private static MessageDigest sha256() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException exception) {
+            throw new AssertionError("SHA-256 is unavailable", exception);
         }
     }
 
