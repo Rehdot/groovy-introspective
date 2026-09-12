@@ -4,6 +4,7 @@ import com.sun.tools.attach.VirtualMachine;
 import com.sun.tools.attach.VirtualMachineDescriptor;
 import org.jline.keymap.KeyMap;
 import org.jline.reader.*;
+import org.jline.reader.impl.DefaultParser;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import org.jline.utils.AttributedStringBuilder;
@@ -21,6 +22,12 @@ final class JvmSelector {
             .foreground(AttributedStyle.GREEN);
     private static final AttributedStyle GREEN_BOLD = GREEN.bold();
     private static final AttributedStyle MUTED = AttributedStyle.DEFAULT.faint();
+    private static final DefaultParser SELECTOR_PARSER = new DefaultParser() {
+        @Override
+        public boolean isDelimiterChar(CharSequence buffer, int position) {
+            return false;
+        }
+    };
 
     static Optional<String> select() {
         List<VirtualMachineDescriptor> initial = availableJvms();
@@ -33,6 +40,7 @@ final class JvmSelector {
             LineReader reader = LineReaderBuilder.builder()
                     .appName("grin")
                     .terminal(terminal)
+                    .parser(SELECTOR_PARSER)
                     .completer((ignored, line, candidates) -> addCandidates(terminal, candidates))
                     .option(LineReader.Option.AUTO_LIST, true)
                     .option(LineReader.Option.LIST_ROWS_FIRST, true)
