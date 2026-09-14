@@ -23,7 +23,7 @@ public class GrinAgent {
 
         AggregateClassLoader aggregate = AggregateClassLoader.getInstance();
         if (aggregate == null) {
-            aggregate = new AggregateClassLoader(GrinAgent.class.getClassLoader(), inst);
+            aggregate = new AggregateClassLoader(GrinAgent.class.getClassLoader(), inst, NAMESPACE_INDEX);
             AggregateClassLoader.setInstance(aggregate);
         } else {
             aggregate.refreshDelegates();
@@ -46,7 +46,7 @@ public class GrinAgent {
         Instrumentation inst = instrumentation;
         if (inst == null) return;
 
-        Set<String> seenPaths = ConcurrentHashMap.newKeySet();
+        Set<String> seenLocations = ConcurrentHashMap.newKeySet();
         for (Class<?> clazz : inst.getAllLoadedClasses()) {
             try {
                 NAMESPACE_INDEX.addClassName(clazz.getName());
@@ -58,13 +58,11 @@ public class GrinAgent {
                 if (codeSource == null) continue;
 
                 URL location = codeSource.getLocation();
-                if (location == null) continue;
-                if (!"file".equalsIgnoreCase(location.getProtocol())) continue;
+                if (location == null || !"file".equalsIgnoreCase(location.getProtocol())
+                        || !seenLocations.add(location.toExternalForm())) continue;
 
                 String path = new File(location.toURI()).getCanonicalPath();
-                if (seenPaths.add(path)) {
-                    NAMESPACE_INDEX.addPath(Path.of(path));
-                }
+                NAMESPACE_INDEX.addPath(Path.of(path));
             } catch (Throwable ignored) {}
         }
     }

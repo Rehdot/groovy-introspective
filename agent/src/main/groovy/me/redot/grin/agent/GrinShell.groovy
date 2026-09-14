@@ -1,6 +1,7 @@
 package me.redot.grin.agent
 
 import groovy.transform.Canonical
+import me.redot.grin.agent.completion.ImportSuggestionCompleter
 import me.redot.grin.agent.completion.NamespaceClassCompleter
 import org.apache.groovy.groovysh.Main
 import org.apache.groovy.groovysh.jline.GroovyCommands
@@ -26,8 +27,6 @@ import org.jline.terminal.Size
 import org.jline.terminal.Terminal
 import org.jline.terminal.impl.ExternalTerminal
 import org.jline.utils.OSUtils
-import org.jline.widget.AutosuggestionWidgets
-import org.jline.widget.TailTipWidgets
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.*
@@ -119,6 +118,7 @@ class GrinShell {
         def consoleEngine = new GroovyConsoleEngine(scriptEngine, printer, { workDir }, configPath, reader)
         def builtins = GrinBuiltinsFactory.create({ workDir }, configPath, reader, null)
 
+        ImportSuggestionCompleter importSuggestions
         def systemRegistry = new GroovySystemRegistry(
                 parser,
                 terminal,
@@ -128,8 +128,9 @@ class GrinShell {
             setCommandRegistries(consoleEngine, builtins, groovy)
             groupCommandsInHelp(false)
             setScriptDescription(scriptEngine.&scriptDescription)
+            importSuggestions = new ImportSuggestionCompleter(scriptEngine.scriptCompleter)
+            addCompleter(importSuggestions)
             addCompleter(new NamespaceClassCompleter(GrinAgent.getNamespaceIndex()))
-            addCompleter(scriptEngine.scriptCompleter)
 
             renameLocal('exit', '/exit')
             renameLocal('help', '/help')
@@ -158,12 +159,6 @@ class GrinShell {
         reader.highlighter = highlighter
         reader.completer = systemRegistry.completer()
 
-        new TailTipWidgets(
-                reader, systemRegistry.&commandDescription,
-                5, TailTipWidgets.TipType.COMPLETER
-        )
-        new AutosuggestionWidgets(reader).inspect()
-
         def writer = new PrintWriter(new OutputStreamWriter(output, StandardCharsets.UTF_8), true)
         def dashboard = new GrinDashboard(terminal, grin.header)
 
@@ -186,16 +181,27 @@ class GrinShell {
                 try {
                     systemRegistry.cleanUp()
 
-                    def line = reader.readLine(render('grin', 'green') + render('> '))
+                    def prompt = render('grin', 'green') + render('> ')
+                    def initialBuffer = importSuggestions.initialBuffer()
+                    def line
+                    try {
+                        line = initialBuffer == null
+                                ? reader.readLine(prompt)
+                                : reader.readLine(prompt, null as Character, initialBuffer)
+                    } finally {
+                        importSuggestions.clear()
+                    }
                     def result = systemRegistry.execute(line)
 
                     consoleEngine.println(result?.toString())
                 } catch (UserInterruptException ignored) {
-                    // ignore
+                    importSuggestions.clear()
                 } catch (EndOfFileException ignored) {
+                    importSuggestions.clear()
                     break
                 } catch (Throwable t) {
                     systemRegistry.trace(t)
+                    suggestImport(t, importSuggestions, writer)
                 }
             }
         } finally {
@@ -206,6 +212,53 @@ class GrinShell {
             terminal.close()
         }
         return 0
+    }
+
+    private static void suggestImport(Throwable failure, ImportSuggestionCompleter suggestions, PrintWriter writer) {
+        def missing = findMissingProperty(failure)
+        if (missing == null || missing.type == null || !Script.isAssignableFrom(missing.type)) return
+
+        String simpleName = missing.property
+        if (!isIdentifier(simpleName)) return
+
+        def matches = GrinAgent.namespaceIndex.classesNamed(simpleName)
+        if (matches.isEmpty()) return
+
+        def aggregate = AggregateClassLoader.instance
+        def ranked = aggregate == null ? matches.sort() : aggregate.rankClassNames(matches)
+
+        writer.println("Found ${ranked.size()} type${ranked.size() == 1 ? "" : "s"} matching '${simpleName}'. Press Tab to choose:")
+
+        int displayed = Math.min(8, ranked.size())
+        for (int i = 0; i < displayed; i++) {
+            writer.println("  ${ranked[i]}")
+        }
+
+        if (ranked.size() > displayed) {
+            writer.println("  ... and ${ranked.size() - displayed} more")
+        }
+
+        suggestions.suggest(ranked)
+    }
+
+    private static MissingPropertyException findMissingProperty(Throwable failure) {
+        def seen = Collections.newSetFromMap(new IdentityHashMap<Throwable, Boolean>())
+
+        for (Throwable current = failure; current != null && seen.add(current); current = current.cause) {
+            if (current instanceof MissingPropertyException) return current
+        }
+
+        return null
+    }
+
+    private static boolean isIdentifier(String value) {
+        if (value == null || value.isEmpty() || !Character.isJavaIdentifierStart(value.charAt(0))) return false
+
+        for (int i = 1; i < value.length(); i++) {
+            if (!Character.isJavaIdentifierPart(value.charAt(i))) return false
+        }
+
+        return true
     }
 
     private static Optional<File> getScriptFile(String name) {

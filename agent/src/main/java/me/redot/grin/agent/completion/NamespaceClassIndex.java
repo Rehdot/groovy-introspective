@@ -3,10 +3,7 @@ package me.redot.grin.agent.completion;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -45,6 +42,51 @@ public final class NamespaceClassIndex {
 
     public Set<String> classChildren(String packageName) {
         return this.classes.getOrDefault(packageName, Collections.emptySet());
+    }
+
+    public List<String> classesNamed(String simpleName) {
+        if (!isIdentifier(simpleName)) return Collections.emptyList();
+
+        List<String> matches = new ArrayList<>();
+        for (Map.Entry<String, Set<String>> entry : this.classes.entrySet()) {
+            if (entry.getValue().contains(simpleName)) {
+                String packageName = entry.getKey();
+                matches.add(packageName.isEmpty() ? simpleName : packageName + "." + simpleName);
+            }
+        }
+
+        return matches;
+    }
+
+    public boolean containsClass(String binaryName) {
+        if (binaryName == null || binaryName.startsWith("[") || binaryName.indexOf('/') >= 0) return false;
+
+        int lastDot = binaryName.lastIndexOf('.');
+        String packageName = lastDot < 0 ? "" : binaryName.substring(0, lastDot);
+        String simpleName = binaryName.substring(lastDot + 1);
+        Set<String> packageClasses = this.classes.get(packageName);
+
+        return packageClasses != null && packageClasses.contains(simpleName);
+    }
+
+    public Set<Path> sourcesFor(String binaryName) {
+        if (!this.containsClass(binaryName)) return Collections.emptySet();
+
+        String classPath = binaryName.replace('.', '/') + ".class";
+        Set<Path> matches = new LinkedHashSet<>();
+
+        for (Path source : this.scannedPaths) {
+            try {
+                if (Files.isDirectory(source)) {
+                    if (Files.isRegularFile(source.resolve(classPath))) matches.add(source);
+                } else if (Files.isRegularFile(source)) {
+                    try (JarFile jar = new JarFile(source.toFile())) {
+                        if (jar.getJarEntry(classPath) != null) matches.add(source);
+                    }
+                }
+            } catch (IOException | RuntimeException ignored) {}
+        }
+        return matches;
     }
 
     private void scanJar(Path path) throws IOException {
