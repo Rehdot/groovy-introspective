@@ -15,6 +15,7 @@ import java.io.PrintWriter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 final class JvmSelector {
 
@@ -156,7 +157,7 @@ final class JvmSelector {
         }
     }
 
-    private static String styled(Terminal terminal, java.util.function.Consumer<AttributedStringBuilder> content) {
+    private static String styled(Terminal terminal, Consumer<AttributedStringBuilder> content) {
         AttributedStringBuilder builder = new AttributedStringBuilder();
         content.accept(builder);
         return builder.toAttributedString().toAnsi(terminal);
