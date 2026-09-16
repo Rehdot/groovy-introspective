@@ -2,7 +2,7 @@
 Ever wanted to dissect an already-running JVM using
 a simple, fluent programming language? I certainly have.
 
-With this groovy-introspective (grin), you can attach to a local JVM
+With groovy-introspective (or 'grin' for short), you can attach to a local JVM
 using its process ID and effortlessly play with its values,
 using Groovy.
 
@@ -13,13 +13,13 @@ using Groovy.
 - Attach to an already-running local JVM by PID or through an interactive process selector
 - Execute Groovy expressions inside the target process
 - Access any classes across the target's entire classloader graph
-- Tab-complete package and class names discovered from loaded classes and runtime JARs
-- Suggest and rank matching imports when an unqualified type cannot be resolved
+- Tab-completion for package and class names discovered from loaded classes and runtime JARs
+- Suggestions for imports when an unqualified type cannot be resolved
 - Monitor CPU, heap, non-heap, threads, garbage collection, uptime, and class loading
 - Add application-specific values to the live dashboard
 - Use persistent command history, syntax highlighting, multiline editing, and shell commands
 - Run custom Groovy scripts upon attaching and detaching
-- Detach and reattach fearlessly
+- Fearless detachments and reattachments
 
 ---
 
@@ -55,12 +55,36 @@ right directory for you. All that is required afterward is the script and PATH s
 Since there's a lot going on, there are a few dependencies.
 The REPL itself is built on top of [groovysh](https://groovy-lang.org/groovysh.html)
 internals, with multiple differing design choices at play.
-
 Outside of this, grin relocates a lot of external packages, but
 the important ones are namely [jline](https://github.com/jline/jline3),
-[SSHD](https://mina.apache.org/sshd-project/), and groovysh. The reason
-that it relocates any dependencies at all is for compatibility.
+[SSHD](https://mina.apache.org/sshd-project/), and most of Groovy 5.
+
+The reason that it relocates any dependencies at all is for compatibility.
 If some running JVM already has `org.jline`, it may have a very different
 version. Therefore, I found the best option to be relocating grin's
 dependencies explicitly to `me.redot.grin.shaded`
 which nobody will ever use (probably).
+
+---
+
+### Why Groovy?
+
+I chose Groovy for the REPL for a few reasons:
+
+1. Its compiler's availability and compatibility.
+The core JAR for this tool sits at around 17MB. It contains
+all the Groovy dependencies it needs to work its magic.
+2. It's fun and easy. Nearly anything that works in Java
+will work in Groovy, and Groovy has a lot of healthy abstractions
+on top of standard Java syntax. The learning curve is flat.
+3. Speed. Due to Groovy's syntax and metaprogramming support,
+writing scripts on top of a live JVM is smooth and quick.
+
+---
+
+### Limitations
+
+- Support for multiple SSHD sessions is non-existent;
+new SSHD sessions will close the previous one
+- Every script is stored in memory for the entire runtime;
+there is no supported way to purge them
