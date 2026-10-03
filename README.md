@@ -1,25 +1,42 @@
-## groovy-introspective
-Ever wanted to dissect an already-running JVM using
-a simple, fluent programming language? I certainly have.
+## Groovy Introspective
 
-With groovy-introspective (or 'grin' for short), you can attach to a local JVM
-using its process ID and effortlessly play with its values,
-using Groovy.
+#### Attach to a running JVM and pick it apart in real time.
+
+Groovy Introspective is a developer tool that attaches to an existing
+Java process and opens an interactive Groovy environment inside its runtime,
+allowing developers to inspect, debug, and interact with a live JVM.
+
+_Here's a speedy demo:_
+![demo.gif](demo.gif)
 
 ---
 
-### Features
+### Why I Built It
 
-- Attach to an already-running local JVM by PID or through an interactive process selector
-- Execute Groovy expressions inside the target process
-- Access any classes across the target's entire classloader graph
-- Tab-completion for package and class names discovered from loaded classes and runtime JARs
-- Suggestions for imports when an unqualified type cannot be resolved
-- Monitor CPU, heap, non-heap, threads, garbage collection, uptime, and class loading
-- Add application-specific values to the live dashboard
-- Use persistent command history, syntax highlighting, multiline editing, and shell commands
-- Run custom Groovy scripts upon attaching and detaching
-- Fearless detachments and reattachments
+Knowing what's going on inside a large deployed
+system as you're developing it can be challenging.
+Before I created this tool, I always wished I could _just know_
+certain values without having to restart my service or
+look through a giant log file.
+
+With this tool, I've been able to quickly test code paths,
+grab random JVM values, and inspect any program's state much more clearly.
+Every time I exit this tool, I know more than I did before.
+It has directly solved a large pain-point for me, so I decided
+to open-source it for anyone else to use.
+
+---
+
+### Key Capabilities
+
+- Attaches to running JVM processes
+- Interactive Groovy execution
+- JVM process discovery
+- External agent attachment
+- Runtime classpath discovery
+- Code completion
+- SSH-based interactive sessions
+- Live runtime inspection/debugging
 
 ---
 
